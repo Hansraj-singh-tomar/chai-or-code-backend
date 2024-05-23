@@ -7,6 +7,8 @@ class ApiResponse {
     }
 }
 
+export { ApiResponse }
+
 
 // Status code -
 // badi componies me hame inki spack sheet(Memo) milti hai jisme hame mention milta hai inn status code ka
