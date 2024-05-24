@@ -72,4 +72,76 @@ const registerUser = asyncHandler(async (req, res) => {
     return res.status(201).json(new ApiResponse(200, createdUser, "User registered Successfully"))
 })
 
-export default registerUser;
+const generateAccessAndRefreshTokens = async (userId) => {
+    try {
+        const user = await User.findById(userId)
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
+        user.refreshToken = refreshToken;
+        // user.save(); // yha jaise hi save karvayenge mongoose ke model kick in hone lag jate hai, password hona hi chahiye and all that, yha password to dala hi nhi hai ek hi field ko update kiya hai
+        // esi situation me ham ek parameter pass karte hai 
+        await user.save({ validateBeforeSave: false })
+        return { accessToken, refreshToken }
+    } catch (error) {
+        throw new ApiError(500, "something went wrong while generating refresh and access token")
+    }
+}
+
+const loginUser = asyncHandler(async (req, res) => {
+
+    // get userData from the frontend
+    // req body -> data 
+    // userName or email
+    // find the user 
+    // password check
+    // access and refreshToken
+    // send cookies 
+
+    const { email, userName, password } = req.body;
+
+    if (!email || !userName) {
+        throw new ApiError(400, "username or password is required")
+    }
+
+    const user = await User.findOne({
+        $or: [{ userName }, { email }]
+    })
+
+    if (!user) {
+        throw new ApiError(404, "user does not exist");
+    }
+
+    // findOne, create and all mongoose ke method hai jinhe ham capital User se access kar sakte hai 
+    // isPasswordCorrect, generateAccessToken, generateRefreshToken ye sab method hamare user ke andar available hai jo hamne db se liya hai
+    const isPasswordValid = await user.isPasswordCorrect(password);
+
+    if (!isPasswordValid) {
+        throw new ApiError(401, "Invalid use credentials");
+    }
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id)
+
+    // yha hame again user ko access karna padega kyoki abhi tak purane user me refresh token and accessToken ki value save nhi hui hai  
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+
+    const options = {
+        httpOnly: true,
+        secure: true, // now this cookies are modifiable from the server
+    }
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    user: loggedInUser, accessToken, refreshToken
+                },
+                "user logged in successfully"
+            )
+        )
+})
+
+export { registerUser, loginUser };
