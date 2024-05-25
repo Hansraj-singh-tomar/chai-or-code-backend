@@ -2,7 +2,9 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js"
 import { User } from "../models/user.model.js"
 import { uploadOnCloudinary, ApiResponse } from "../utils/cloudinary.js"
+import jwt from "jsonwebtoken"
 
+// --------------------- Register user -------------------------------
 
 const registerUser = asyncHandler(async (req, res) => {
     // res.status(200).json({ message: "ok" })
@@ -72,6 +74,8 @@ const registerUser = asyncHandler(async (req, res) => {
     return res.status(201).json(new ApiResponse(200, createdUser, "User registered Successfully"))
 })
 
+// --------------------- login user --------------------------------
+
 const generateAccessAndRefreshTokens = async (userId) => {
     try {
         const user = await User.findById(userId)
@@ -87,6 +91,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
     }
 }
 
+
 const loginUser = asyncHandler(async (req, res) => {
 
     // get userData from the frontend
@@ -99,10 +104,12 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const { email, userName, password } = req.body;
 
-    if (!email || !userName) {
+    // if (!email || !userName) {
+    if (!(email || userName)) {
         throw new ApiError(400, "username or password is required")
     }
 
+    // userName and email dono ke through ham user ko get kar rhe hai
     const user = await User.findOne({
         $or: [{ userName }, { email }]
     })
@@ -144,4 +151,82 @@ const loginUser = asyncHandler(async (req, res) => {
         )
 })
 
-export { registerUser, loginUser };
+
+// ------------------------- logout user --------------------------------------
+
+const logoutUser = asyncHandler(async (req, res) => {
+    // we will have to remove refresh and access token from the db
+
+    // req.user hamne auth.middleware me set kiya tha vhi hai ye
+
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set: {
+                refreshToken: undefined
+            }
+        },
+        {
+            new: true // return me jo response milega usme new updated value milegi
+        }
+    )
+
+    const options = {
+        httpOnly: true,
+        secure: true, // now this cookies are modifiable from the server
+    }
+
+    return res
+        .status(200)
+        .clearCookie("accessToken", options)
+        .clearCookie("refreshToken", options)
+        .json(new ApiResponse(200, {}, "User logged out successfully"))
+})
+
+// ------------------------------ RefreshAccessToken -------------------------------
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "Unauthorized request")
+    }
+
+    try {
+        const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+
+        const user = User.findById(decodedToken?._id)
+
+        if (!user) {
+            throw new ApiError(401, "Invalid refresh token");
+        }
+
+        if (incomingRefreshToken !== user?.refreshToken) {
+            throw new ApiError(401, "Refresh token is expired or used");
+        }
+
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+
+        const { newRefreshAccessToken, accessToken } = await generateAccessAndRefreshTokens(user._id)
+
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", newRefreshAccessToken, options)
+            .json(
+                new ApiResponse(
+                    200,
+                    { accessToken, refreshToken: newRefreshAccessToken },
+                    "Access token refreshed"
+                )
+            )
+    } catch (error) {
+        throw new ApiError(401, error.message || "Invalid refresh token")
+    }
+})
+
+
+export { registerUser, loginUser, logoutUser, refreshAccessToken };
