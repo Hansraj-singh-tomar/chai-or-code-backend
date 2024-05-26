@@ -31,5 +31,4 @@ router.route("/logout", post(varifyJWT, logoutUser))
 // secured routes
 router.route("/refresh-token", post(refreshAccessToken))
 
-
 export default router
