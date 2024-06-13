@@ -253,7 +253,7 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 const getCurrentUser = asyncHandler(async (req, res) => {
     return res
         .status(200)
-        .json(200, req.user, "current user fetched successfully");
+        .json(new ApiResponse(200, req.user, "current user fetched successfully"));
 })
 
 // Note :- agar ham khi par file update karva rhe hai to uske alag controller rkhna hai, alag endpoints rakhna hai 
@@ -265,7 +265,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
         throw new ApiError(400, "All fields are required")
     }
 
-    const updatedUser = User.findByIdAndUpdate(
+    const updatedUser = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
@@ -290,6 +290,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Avatar file is missing")
     }
 
+
     const avatar = await uploadOnCloudinary(avatarLocalPath)
 
     if (!avatar.url) {
@@ -306,12 +307,15 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         { new: true }
     ).select("-password")
 
+    // TODO: delete old image - assignment
+
     return res
         .status(200)
         .json(
             new ApiResponse(200, user, "avatar update successfully")
         )
 })
+
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {
     // here we are getting one file
